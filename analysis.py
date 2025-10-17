@@ -54,20 +54,43 @@ def clean_data(df):
     # Replace -200 values (missing data indicator) with NaN
     df_clean = df_clean.replace(-200, np.nan)
     
-    # Convert date and time columns
-    df_clean['Date'] = pd.to_datetime(df_clean['Date'], format='%d/%m/%Y')
-    df_clean['Time'] = pd.to_datetime(df_clean['Time'], format='%H.%M.%S').dt.time
+    # Robust Date parsing: infer common formats (handles MM/DD/YYYY and DD/MM/YYYY)
+    if 'Date' in df_clean.columns:
+        df_clean['Date'] = pd.to_datetime(
+            df_clean['Date'],
+            dayfirst=False,
+            errors='coerce',
+            infer_datetime_format=True
+        )
+    
+    # Robust Time parsing: accept "HH:MM:SS", "HH.MM.SS", "HH:MM" and mixed formats
+    if 'Time' in df_clean.columns:
+        time_series = df_clean['Time'].astype(str).str.strip()
+        # Normalize dots to colons (e.g. "18.00.00" -> "18:00:00")
+        time_norm = time_series.str.replace('.', ':', regex=False)
+        
+        parsed = pd.to_datetime(time_norm, format='%H:%M:%S', errors='coerce')
+        parsed = parsed.combine_first(pd.to_datetime(time_norm, format='%H:%M', errors='coerce'))
+        # Final fallback: let pandas infer mixed formats
+        parsed = parsed.combine_first(pd.to_datetime(time_series, errors='coerce', infer_datetime_format=True))
+        
+        # Keep only the time portion (may be NaT if unparsed)
+        df_clean['Time'] = parsed.dt.time
     
     # Create datetime column for easier time series analysis
-    # Only create DateTime for rows where both Date and Time are valid
-    valid_datetime_mask = df_clean['Date'].notna() & df_clean['Time'].notna()
+    # Populate DateTime (capital T) and also create alias 'Datetime' for other code paths
     df_clean['DateTime'] = pd.NaT
-    
-    if valid_datetime_mask.any():
-        df_clean.loc[valid_datetime_mask, 'DateTime'] = pd.to_datetime(
-            df_clean.loc[valid_datetime_mask, 'Date'].astype(str) + ' ' + 
-            df_clean.loc[valid_datetime_mask, 'Time'].astype(str)
-        )
+    if 'Date' in df_clean.columns and 'Time' in df_clean.columns:
+        valid_datetime_mask = df_clean['Date'].notna() & df_clean['Time'].notna()
+        if valid_datetime_mask.any():
+            df_clean.loc[valid_datetime_mask, 'DateTime'] = pd.to_datetime(
+                df_clean.loc[valid_datetime_mask, 'Date'].dt.strftime('%Y-%m-%d') + ' ' +
+                df_clean.loc[valid_datetime_mask, 'Time'].astype(str),
+                errors='coerce',
+                infer_datetime_format=True
+            )
+    # alias used elsewhere in repo
+    df_clean['Datetime'] = df_clean['DateTime']
     
     # Convert numeric columns, handling comma as decimal separator
     numeric_columns = ['CO(GT)', 'PT08.S1(CO)', 'NMHC(GT)', 'C6H6(GT)', 

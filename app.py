@@ -1,13 +1,7 @@
-"""
-Air Quality Dashboard - Main Streamlit Application
-
-This is the main application file for the UCI Air Quality Dataset dashboard.
-Students will work in teams to enhance this dashboard through Git collaboration.
-"""
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+from ucimlrepo import fetch_ucirepo
 from analysis import load_data, clean_data, get_data_summary, calculate_air_quality_metrics
 from visualize import (plot_co_over_time, plot_temperature_vs_humidity, 
                       plot_pollutant_distribution, plot_correlation_heatmap,
@@ -45,6 +39,69 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+@st.cache_data
+def load_and_clean_data():
+    try:
+        # Fetch UCI Air Quality dataset
+        air_quality = fetch_ucirepo(id=360)
+        df = air_quality.data.features.copy()
+        
+        # Robust Date parsing: let pandas infer common formats (handles MM/DD/YYYY and DD/MM/YYYY)
+        if 'Date' in df.columns:
+            df['Date'] = pd.to_datetime(
+                df['Date'],
+                dayfirst=False,
+                errors='coerce',
+                infer_datetime_format=True
+            )
+        
+        # Robust Time parsing: normalize separators then try multiple parses, fallback to inference
+        time_col_saved = None
+        if 'Time' in df.columns:
+            time_series = df['Time'].astype(str).str.strip()
+            # Normalize common separators (e.g. "18.00.00" -> "18:00:00")
+            time_norm = time_series.str.replace('.', ':', regex=False)
+            
+            # Try common explicit formats first
+            parsed = pd.to_datetime(time_norm, format='%H:%M:%S', errors='coerce')
+            parsed = parsed.combine_first(pd.to_datetime(time_norm, format='%H:%M', errors='coerce'))
+            # Final fallback: let pandas infer mixed formats
+            parsed = parsed.combine_first(pd.to_datetime(time_series, errors='coerce', infer_datetime_format=True))
+            
+            # Keep only the time portion (may be NaT if unparsed)
+            parsed_time = parsed.dt.time
+            # Save parsed time separately and remove Time from df to avoid downstream parsing errors
+            time_col_saved = parsed_time
+            df = df.drop(columns=['Time'])
+        
+        # Combine Date and Time into a single Datetime column when both are available
+        if 'Date' in df.columns and time_col_saved is not None:
+            df['Time'] = time_col_saved.astype(str)  # add back as stable string (HH:MM:SS or 'None')
+            df['Datetime'] = pd.to_datetime(
+                df['Date'].dt.strftime('%Y-%m-%d') + ' ' + df['Time'],
+                errors='coerce',
+                infer_datetime_format=True
+            )
+            df = df.sort_values('Datetime').reset_index(drop=True)
+        
+        # Call clean_data on dataframe without the original raw Time values that may trigger strict parsing
+        df = clean_data(df)
+        
+        # If clean_data removed or altered Time, ensure stable Time/Datetime columns are present
+        if 'Datetime' not in df.columns and 'Date' in df.columns and time_col_saved is not None:
+            df['Time'] = time_col_saved.astype(str)
+            df['Datetime'] = pd.to_datetime(
+                df['Date'].dt.strftime('%Y-%m-%d') + ' ' + df['Time'],
+                errors='coerce',
+                infer_datetime_format=True
+            )
+            df = df.sort_values('Datetime').reset_index(drop=True)
+        
+        return df
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        return None
+
 def main():
     """Main application function."""
     
@@ -59,21 +116,12 @@ def main():
     The dataset includes various air pollutants and weather variables collected over time.
     """)
     
-    # Load and cache data
-    @st.cache_data
-    def load_and_clean_data():
-        """Load and clean the air quality data."""
-        raw_data = load_data("data/AirQualityUCI.csv")
-        if raw_data is not None:
-            return clean_data(raw_data)
-        return None
-    
     # Load data
     with st.spinner("Loading air quality data..."):
         df = load_and_clean_data()
     
     if df is None:
-        st.error("Could not load the air quality dataset. Please check if 'data/AirQualityUCI.csv' exists.")
+        st.error("Failed to load data. Please check your connection and try again.")
         return
     
     # Key Metrics - KPI Boxes
