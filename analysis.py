@@ -132,64 +132,42 @@ def get_data_summary(df):
     return summary
 
 
-def calculate_air_quality_metrics(df):
+import pandas as pd
+
+def calculate_air_quality_metrics(df: pd.DataFrame) -> dict:
     """
     Calculate key air quality metrics and statistics.
     
     Args:
-        df (pd.DataFrame): Cleaned dataset
+        df (pd.DataFrame): Cleaned dataset.
         
     Returns:
-        dict: Air quality metrics
+        dict: Dictionary containing air quality metrics for available columns.
     """
-    if df is None:
+    if df is None or df.empty:
         return {}
-    
+
     metrics = {}
-    
-    # CO (Carbon Monoxide) metrics
-    if 'CO(GT)' in df.columns:
-        co_data = df['CO(GT)'].dropna()
-        metrics['co'] = {
-            'mean': co_data.mean(),
-            'median': co_data.median(),
-            'max': co_data.max(),
-            'min': co_data.min(),
-            'std': co_data.std()
-        }
-    
-    # Temperature metrics
-    if 'T' in df.columns:
-        temp_data = df['T'].dropna()
-        metrics['temperature'] = {
-            'mean': temp_data.mean(),
-            'median': temp_data.median(),
-            'max': temp_data.max(),
-            'min': temp_data.min(),
-            'std': temp_data.std()
-        }
-    
-    # Humidity metrics
-    if 'RH' in df.columns:
-        rh_data = df['RH'].dropna()
-        metrics['humidity'] = {
-            'mean': rh_data.mean(),
-            'median': rh_data.median(),
-            'max': rh_data.max(),
-            'min': rh_data.min(),
-            'std': rh_data.std()
-        }
-    
-    # Absolute Humidity metrics
-    if 'AH' in df.columns:
-        ah_data = df['AH'].dropna()
-        metrics['absolute_humidity'] = {
-            'mean': ah_data.mean(),
-            'median': ah_data.median(),
-            'max': ah_data.max(),
-            'min': ah_data.min(),
-            'std': ah_data.std()
-        }
+    columns_to_check = {
+        'CO(GT)': 'co',
+        'T': 'temperature',
+        'RH': 'humidity',
+        'AH': 'absolute_humidity'
+    }
+
+    for col, name in columns_to_check.items():
+        if col in df.columns:
+            data = df[col].dropna()
+            if not data.empty:
+                metrics[name] = {
+                    'mean': data.mean(),
+                    'median': data.median(),
+                    'max': data.max(),
+                    'min': data.min(),
+                    'std': data.std()
+                }
+            else:
+                metrics[name] = 'No valid data available'
     
     return metrics
 
