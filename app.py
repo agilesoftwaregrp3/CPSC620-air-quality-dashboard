@@ -123,12 +123,31 @@ def main():
     if df is None:
         st.error("Failed to load data. Please check your connection and try again.")
         return
+
+    # Add date filter
+    st.markdown('<h2 class="section-header">Date Filter</h2>', unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        min_date = df['Date'].min().date()
+        max_date = df['Date'].max().date()
+        start_date = st.date_input('Start Date', min_date, min_value=min_date, max_value=max_date)
+    
+    with col2:
+        end_date = st.date_input('End Date', max_date, min_value=min_date, max_value=max_date)
+
+    # Filter dataframe based on selected dates
+    mask = (df['Date'].dt.date >= start_date) & (df['Date'].dt.date <= end_date)
+    filtered_df = df[mask]
+
+    # Show number of records after filtering
+    st.info(f"Showing {len(filtered_df)} records between {start_date} and {end_date}")
     
     # Key Metrics - KPI Boxes
     st.markdown('<h2 class="section-header">Key Metrics</h2>', unsafe_allow_html=True)
     
-    # Calculate metrics
-    metrics = calculate_air_quality_metrics(df)
+    # Calculate metrics using filtered data
+    metrics = calculate_air_quality_metrics(filtered_df)
     display_metrics = create_summary_metrics_display(metrics)
     
     if display_metrics:
@@ -145,7 +164,7 @@ def main():
     
     # Data preview table
     st.markdown('<h2 class="section-header">Data Preview</h2>', unsafe_allow_html=True)
-    st.dataframe(df.head(10), use_container_width=True)
+    st.dataframe(filtered_df.head(10), use_container_width=True)
     
     # Visualizations
     st.markdown('<h2 class="section-header">Data Visualizations</h2>', unsafe_allow_html=True)
@@ -155,7 +174,7 @@ def main():
     
     with col1:
         st.subheader("CO Concentration Over Time")
-        co_plot = plot_co_over_time(df)
+        co_plot = plot_co_over_time(filtered_df)
         if co_plot:
             st.pyplot(co_plot)
         else:
@@ -163,7 +182,7 @@ def main():
     
     with col2:
         st.subheader("Temperature vs Absolute Humidity")
-        temp_humidity_plot = plot_temperature_vs_humidity(df)
+        temp_humidity_plot = plot_temperature_vs_humidity(filtered_df)
         if temp_humidity_plot:
             st.pyplot(temp_humidity_plot)
         else:
@@ -174,13 +193,13 @@ def main():
     
     with col3:
         st.subheader("CO Distribution")
-        co_dist_plot = plot_pollutant_distribution(df, 'CO(GT)')
+        co_dist_plot = plot_pollutant_distribution(filtered_df, 'CO(GT)')
         if co_dist_plot:
             st.pyplot(co_dist_plot)
     
     with col4:
         st.subheader("NOx(GT) vs Sensor Value")
-        nox_plot = plot_nox_vs_sensor(df)
+        nox_plot = plot_nox_vs_sensor(filtered_df)
         if nox_plot:
             st.pyplot(nox_plot)
         else:
@@ -188,7 +207,7 @@ def main():
     
     # Correlation heatmap
     st.subheader("Correlation Heatmap")
-    corr_plot = plot_correlation_heatmap(df)
+    corr_plot = plot_correlation_heatmap(filtered_df)
     if corr_plot:
         st.pyplot(corr_plot)
 
